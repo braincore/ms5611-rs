@@ -6,8 +6,12 @@ license = "MIT"
 description = "Library for the MS5611 barometric pressure sensor."
 repository = "https://github.com/braincore/ms5611-rs"
 keywords = ["ms5611"]
+edition = "2018"
 readme = "README.md"
 
 [dependencies]
+embedded-hal = "0.2.2"
 byteorder = "1.1.0"
-i2cdev = "0.3.1"
+
+[dev-dependencies]
+linux-embedded-hal = "0.2.2"
