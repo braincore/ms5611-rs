@@ -1,4 +1,4 @@
-# MS5611 Library for Rust [![Latest Version]][crates.io] [![Documentation]][docs.rs] 
+# MS5611 Library for Rust [![Latest Version]][crates.io] [![Documentation]][docs.rs]
 
 [Latest Version]: https://img.shields.io/crates/v/ms5611.svg
 [crates.io]: https://crates.io/crates/ms5611
@@ -15,7 +15,7 @@ interface (no SPI).
 
 ## Usage
 
-See basic test in `lib.rs`.
+See basic test in `tests/basic.rs`.
 
 ## Testing
 
