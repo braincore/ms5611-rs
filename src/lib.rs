@@ -1,11 +1,11 @@
 //! A library for the MS5611 barometric pressure sensor.
 
+#![no_std]
+
 use byteorder::{ByteOrder, BigEndian};
 
+use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::blocking::i2c::{Read, Write, WriteRead};
-
-use std::time;
-use std::thread;
 
 /// Oversampling ratio
 /// See datasheet for more information.
@@ -18,7 +18,7 @@ pub enum Osr {
 }
 
 impl Osr {
-    fn get_delay(&self) -> u64 {
+    fn get_delay(&self) -> u8 {
         match *self {
             Osr::Opt256 => 1,
             Osr::Opt512 => 2,
@@ -40,10 +40,11 @@ impl Osr {
 }
 
 /// Pressure sensor
-pub struct Ms5611<I> {
+pub struct Ms5611<I, D> {
     i2c: I,
     address : u8,
     prom: Prom,
+    delay: D
 }
 
 enum Ms5611Reg {
@@ -97,15 +98,15 @@ struct Prom {
     pub temp_coef_temp: u16,
 }
 
-impl<I, E> Ms5611<I>
+impl<I, D, E> Ms5611<I, D>
 where
-  I: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
+  I: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>, D: DelayMs<u8>,
 {
 
     /// If i2c_addr is unspecified, 0x77 is used.
     /// The addr of the device is 0x77 if CSB is low / 0x76 if CSB is high.
-    pub fn new(mut i2c: I, i2c_addr: Option<u8>)
-            -> Result<Ms5611<I>, E> {
+    pub fn new(mut i2c: I, delay: D, i2c_addr: Option<u8>)
+            -> Result<Self, E> {
         let address = i2c_addr.unwrap_or(0x77);
 
         let prom = Self::read_prom(&mut i2c, address)?;
@@ -114,6 +115,7 @@ where
             i2c,
             address: address,
             prom,
+            delay
         };
 
         Ok(ms)
@@ -124,7 +126,7 @@ where
         self.i2c.write(self.address, &[Ms5611Reg::Reset.addr()])?;
         // Haven't tested for the lower time bound necessary for the chip to
         // start functioning again. But, it does require some amount of sleep.
-        thread::sleep(time::Duration::from_millis(50));
+        self.delay.delay_ms(50);
         Ok(())
     }
 
@@ -209,14 +211,14 @@ where
 
         self.i2c.write(self.address, &[Ms5611Reg::D1.addr() + osr.addr_modifier()])?;
         // If we don't delay, the read is all 0s.
-        thread::sleep(time::Duration::from_millis(osr.get_delay()));
+        self.delay.delay_ms(osr.get_delay());
         self.i2c.write_read(self.address, &[Ms5611Reg::AdcRead.addr()], &mut buf[1 .. 4])?;
 
         // Raw digital pressure
         let d1 = BigEndian::read_i32(&mut buf);
 
         self.i2c.write(self.address, &[Ms5611Reg::D2.addr() + osr.addr_modifier()])?;
-        thread::sleep(time::Duration::from_millis(osr.get_delay()));
+        self.delay.delay_ms(osr.get_delay());
         self.i2c.write_read(self.address, &[Ms5611Reg::AdcRead.addr()], &mut buf[1 .. 4])?;
 
         // Raw digital temperature
@@ -266,47 +268,5 @@ where
             pressure_mbar: pressure as f32/100.0,
             temperature_c: temperature as f32/100.0,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Ms5611, Osr};
-    use std::env;
-
-    fn get_i2c_bus() -> i32 {
-        match env::var("MS5611_I2C_BUS") {
-            Ok(bus_string) => {
-                bus_string.parse().expect(
-                    "Could not convert MS5611_I2C_BUS env var to i32.")
-            },
-            Err(_) => 1,
-        }
-    }
-
-    fn get_i2c_addr() -> Option<u8> {
-        match env::var("MS5611_I2C_ADDR") {
-            Ok(addr_string) => {
-                Some(addr_string.parse().expect(
-                    "Could not convert MS5611_I2C_ADDR env var to u16."))
-            },
-            Err(_) => None,
-        }
-    }
-
-
-	fn get_i2c_bus_path(i2c_bus: i32) -> String {
-        format!("/dev/i2c-{}", i2c_bus)
-    }
-
-
-    #[test]
-    fn basic() {
-        let dev = linux_embedded_hal::I2cdev::new(get_i2c_bus_path(get_i2c_bus())).unwrap();
-
-        let mut ms5611 = Ms5611::new(dev, get_i2c_addr()).unwrap();
-
-        ms5611.read_sample(Osr::Opt256).unwrap();
-        ms5611.reset().unwrap();
     }
 }
