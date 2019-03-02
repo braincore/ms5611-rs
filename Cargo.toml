@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 embedded-hal = "0.2.2"
-byteorder = "1.1.0"
+byteorder = { version = "1.1.0", default-features = false }
 
 [dev-dependencies]
 linux-embedded-hal = "0.2.2"
