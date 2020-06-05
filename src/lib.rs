@@ -40,11 +40,10 @@ impl Osr {
 }
 
 /// Pressure sensor
-pub struct Ms5611<I, D> {
+pub struct Ms5611<I> {
     i2c: I,
     address : u8,
-    prom: Prom,
-    delay: D
+    prom: Prom
 }
 
 enum Ms5611Reg {
@@ -98,14 +97,14 @@ struct Prom {
     pub temp_coef_temp: u16,
 }
 
-impl<I, D, E> Ms5611<I, D>
+impl<I, E> Ms5611<I>
 where
-  I: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>, D: DelayMs<u8>,
+  I: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
 {
 
     /// If i2c_addr is unspecified, 0x77 is used.
     /// The addr of the device is 0x77 if CSB is low / 0x76 if CSB is high.
-    pub fn new(mut i2c: I, delay: D, i2c_addr: Option<u8>)
+    pub fn new(mut i2c: I, i2c_addr: Option<u8>)
             -> Result<Self, E> {
         let address = i2c_addr.unwrap_or(0x77);
 
@@ -114,19 +113,20 @@ where
         let ms = Ms5611 {
             i2c,
             address: address,
-            prom,
-            delay
+            prom
         };
 
         Ok(ms)
     }
 
     /// Triggers a hardware reset of the device.
-    pub fn reset(&mut self) -> Result<(), E> {
+    pub fn reset<D>(&mut self, delay: &mut D) -> Result<(), E>
+    where D: DelayMs<u8>
+    {
         self.i2c.write(self.address, &[Ms5611Reg::Reset.addr()])?;
         // Haven't tested for the lower time bound necessary for the chip to
         // start functioning again. But, it does require some amount of sleep.
-        self.delay.delay_ms(50);
+        delay.delay_ms(50);
         Ok(())
     }
 
@@ -204,21 +204,23 @@ where
     /// Based on oversampling ratio, function may block between 1ms (OSR=256)
     /// to 18ms (OSR=4096). To avoid blocking, consider invoking this function
     /// in a separate thread.
-    pub fn read_sample(&mut self, osr: Osr) -> Result<Ms5611Sample, E> {
+    pub fn read_sample<D>(&mut self, osr: Osr, delay: &mut D) -> Result<Ms5611Sample, E>
+    where D: DelayMs<u8>
+    {
         // Note: Variable names aren't pretty, but they're consistent with the
         // MS5611 datasheet.
         let mut buf = [0u8; 4];
 
         self.i2c.write(self.address, &[Ms5611Reg::D1.addr() + osr.addr_modifier()])?;
         // If we don't delay, the read is all 0s.
-        self.delay.delay_ms(osr.get_delay());
+        delay.delay_ms(osr.get_delay());
         self.i2c.write_read(self.address, &[Ms5611Reg::AdcRead.addr()], &mut buf[1 .. 4])?;
 
         // Raw digital pressure
         let d1 = BigEndian::read_i32(&mut buf);
 
         self.i2c.write(self.address, &[Ms5611Reg::D2.addr() + osr.addr_modifier()])?;
-        self.delay.delay_ms(osr.get_delay());
+        delay.delay_ms(osr.get_delay());
         self.i2c.write_read(self.address, &[Ms5611Reg::AdcRead.addr()], &mut buf[1 .. 4])?;
 
         // Raw digital temperature

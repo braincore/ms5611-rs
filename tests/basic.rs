@@ -32,9 +32,10 @@ fn get_i2c_bus_path(i2c_bus: i32) -> String {
 fn basic() {
     let dev = I2cdev::new(get_i2c_bus_path(get_i2c_bus())).unwrap();
 
-    let mut ms5611 = Ms5611::new(dev, Delay, get_i2c_addr()).unwrap();
+    let mut ms5611 = Ms5611::new(dev, get_i2c_addr()).unwrap();
 
-    ms5611.read_sample(Osr::Opt256).unwrap();
-    ms5611.reset().unwrap();
+    let mut delay = Delay;
+
+    ms5611.read_sample(Osr::Opt256, &mut delay).unwrap();
+    ms5611.reset(&mut delay).unwrap();
 }
-
